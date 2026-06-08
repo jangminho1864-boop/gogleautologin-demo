@@ -24,7 +24,7 @@ google-login-automation/
 ├── requirements.txt
 └── src/
     ├── config.py           # 설정 + OS별 실제 크롬 경로 탐지
-    ├── profile_manager.py  # 잠금 감지 / 전용 프로필 / 실제 프로필 안전 복제
+    ├── profile_manager.py  # 프로필 잠금 감지 / 경로 준비
     ├── google_session.py   # 핵심: 세션 시작·계정 선택·로그인 검증·계정 탐색
     └── exceptions.py
 ```
@@ -39,34 +39,35 @@ pip install -r requirements.txt
 ## 사용법
 
 ```bash
-# 1) 최초 1회: 자동화 전용 프로필에 직접 로그인 (브라우저가 뜸)
-python setup_profile.py
-
-# 2) 데모 실행
+# main.py 는 실제 Chrome 프로필(C드라이브 User Data)을 직접 사용한다.
+# 먼저 평소 쓰는 Chrome 을 모두 종료한 뒤 실행할 것.
 python main.py                # authuser=0 계정으로 진입
 python main.py --authuser 1   # 두 번째 계정
 python main.py --list         # 로그인된 계정 목록만 출력
 python main.py --headless     # 화면 없이 실행
-
-# (선택) 실제 사용 중인 크롬 프로필을 복제해서 사용
-python main.py --clone-real --profile "Default"
+python main.py --profile "Profile 1"   # 다른 프로필 폴더 사용
 ```
+
+> 실행 정책: 실제 Chrome 프로필을 **우선** 사용하며, 프로필을 못 찾거나/잠겨
+> 있거나/로그인된 계정이 없으면 **재시도 없이 즉시 종료**한다.
+>
+> `setup_profile.py` 는 자동화 전용 프로필에 직접 로그인해 두는 보조 헬퍼다(선택).
 
 ## 주의할 함정 3가지
 
 1. **프로필 잠금** — 평소 쓰는 Chrome이 같은 프로필을 열어두면 자동화가 실행되지
-   않는다. 그래서 전용 프로필 또는 `--clone-real` 복제본을 권장한다.
+   않는다. 실행 전 Chrome 을 모두 종료할 것.
    (`ProfileManager` 가 잠금을 사전 감지해 명확한 에러를 던진다.)
 2. **계정 선택** — account chooser를 클릭으로 처리하면 재인증 프롬프트가 뜰 수 있어,
    URL의 `authuser` 인덱스로 지정하는 편이 안정적이다.
 3. **세션 만료** — 세션은 영구적이지 않다. 며칠~몇 주 뒤 재로그인이 필요할 수 있어,
-   `is_logged_in()` 으로 상태를 먼저 확인하고 필요 시 `setup_profile.py` 를 다시 돈다.
+   `is_logged_in()` 으로 상태를 먼저 확인한다.
 
 ## 포트폴리오 어필 포인트
 
 - "비밀번호를 매크로로 입력"이 아니라 **브라우저 세션/쿠키 재사용으로 인증 단계를
   우회 설계**했다 → 구글 봇 탐지 메커니즘을 이해했다는 시그널.
-- `authuser` 기반 **멀티 계정 제어**, 프로필 **잠금 감지·안전 복제** 등 실무에서
+- `authuser` 기반 **멀티 계정 제어**, 프로필 **잠금 감지** 등 실무에서
   실제로 부딪히는 엣지케이스를 핸들링.
 - 컨텍스트 매니저, 타입 힌트, 예외 계층, 로깅 등 **유지보수 가능한 코드 구조**.
 - 동일 전략을 Selenium / Playwright 두 스택으로 구현해 **도구 비종속적 설계** 입증.
