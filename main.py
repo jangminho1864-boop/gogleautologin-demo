@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
+from pathlib import Path
 
 from selenium.common.exceptions import WebDriverException
 
@@ -38,6 +40,7 @@ from src import (
     Settings,
     detect_chrome_user_data_dir,
 )
+from src.google_session import is_loginable_email
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger("main")
@@ -49,23 +52,102 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--list", action="store_true", help="로그인된 계정 목록만 출력")
     p.add_argument("--headless", action="store_true", help="헤드리스 모드로 실행")
     p.add_argument("--profile", default="Default", help="사용할 프로필 폴더명")
+    p.add_argument("--user-data-dir", default=None,
+                   help="사용할 User Data 경로. 지정하면 실제 Chrome 대신 전용 프로필 사용")
+    p.add_argument("--verify-switch", action="store_true",
+                   help="로그인된 계정들 사이 세션 전환이 정상 반영되는지 검증")
+    p.add_argument("--login-logged-out", action="store_true",
+                   help="로그아웃된 계정 로그인 시나리오(수동 로그인 유도, @gmail.com 만 허용)")
     return p.parse_args()
+
+
+def _scenario_verify_switch(gs: GoogleSession, logged_in_users: list[int]) -> int:
+    """로그인된 계정들 사이를 차례로 전환하며 전환이 정상 반영되는지 검증한다.
+
+    각 authuser 로 전환했을 때 (1) 로그인 상태가 유지되고 (2) 활성 계정 이메일이
+    서로 겹치지 않으면(=인덱스별로 다른 계정이 활성화되면) 전환이 정상 반영된 것으로 본다.
+    """
+    print("\n[ 세션 전환 반영 검증 ]")
+    seen_emails: dict[str, int] = {}
+    all_ok = True
+    for u in logged_in_users:
+        info = gs.switch_account(u)
+        problems = []
+        if not info.logged_in:
+            problems.append("전환 후 미로그인")
+        if info.email and info.email in seen_emails:
+            problems.append(f"authuser={seen_emails[info.email]} 와 동일 계정(전환 미반영 의심)")
+        if info.email:
+            seen_emails[info.email] = u
+        mark = "OK" if not problems else "FAIL: " + ", ".join(problems)
+        print(f"  authuser={u}  email={info.email or '-':30s}  [{mark}]")
+        if problems:
+            all_ok = False
+
+    if all_ok:
+        print("\n결과: 모든 계정 전환이 정상 반영되었습니다. ✅")
+        return 0
+    print("\n결과: 일부 계정 전환이 정상 반영되지 않았습니다. ❌")
+    return 5
+
+
+def _scenario_login_logged_out(gs: GoogleSession, accounts: list) -> int:
+    """로그아웃된 계정에 대해 수동 로그인을 유도한다(@gmail.com 만 허용).
+
+    비-gmail(기업/Workspace 등) 계정은 보안 이슈로 진행하지 않고 제외한다.
+    실제 비밀번호 입력은 사용자가 직접 수행한다(봇 탐지/보안 회피).
+    """
+    logged_out = [a for a in accounts if not a.logged_in]
+    if not logged_out:
+        print("\n로그아웃된 계정이 없습니다.")
+        return 0
+
+    print("\n[ 로그아웃 계정 로그인 시나리오 (@gmail.com 만 허용) ]")
+    any_done = False
+    for a in logged_out:
+        # 로그아웃 슬롯은 이메일이 비어있을 수 있어, 계정 선택 화면에서 best-effort 로 읽는다.
+        email = a.email or gs.read_logged_out_email(a.authuser)
+
+        if not is_loginable_email(email):
+            logger.warning(
+                "authuser=%s (%s): @gmail.com 계정이 아니므로 보안상 로그인 제외",
+                a.authuser, email or "도메인 미상",
+            )
+            continue
+
+        url = gs.open_login_page(a.authuser)
+        any_done = True
+        print(f"\n  authuser={a.authuser} ({email}) 로그인 페이지 오픈 → {url}")
+        input("  브라우저에서 로그인(2단계 인증 포함)을 완료한 뒤 Enter 를 누르세요... ")
+
+        info = gs.switch_account(a.authuser)
+        mark = "OK" if info.logged_in else "FAIL(여전히 미로그인)"
+        print(f"  로그인 결과: authuser={a.authuser} logged_in={info.logged_in} [{mark}]")
+
+    if not any_done:
+        print("\n진행 가능한(@gmail.com) 로그아웃 계정이 없습니다.")
+    return 0
 
 
 def main() -> int:
     args = parse_args()
 
-    # 실제 Chrome 프로필(C드라이브 User Data)을 우선 사용한다.
-    real_dir = detect_chrome_user_data_dir()
-    if real_dir is None:
-        logger.error("실제 Chrome User Data 디렉터리를 찾지 못했습니다. (Chrome 미설치?)")
-        return 3
-
     settings = Settings.from_env()
-    settings.user_data_dir = real_dir
     settings.headless = args.headless or settings.headless
     settings.profile_directory = args.profile
-    logger.info("실제 Chrome 프로필 사용: %s", real_dir / args.profile)
+
+    # 프로필(User Data) 결정 우선순위:
+    #   1) --user-data-dir 인자  2) GLA_USER_DATA_DIR 환경변수(Settings.from_env)
+    #   3) 실제 Chrome User Data(C드라이브) 자동 탐지
+    if args.user_data_dir:
+        settings.user_data_dir = Path(args.user_data_dir).expanduser()
+    elif "GLA_USER_DATA_DIR" not in os.environ:
+        real_dir = detect_chrome_user_data_dir()
+        if real_dir is None:
+            logger.error("실제 Chrome User Data 디렉터리를 찾지 못했습니다. (Chrome 미설치?)")
+            return 3
+        settings.user_data_dir = real_dir
+    logger.info("프로필 사용: %s", settings.user_data_dir / args.profile)
 
     try:
         with GoogleSession(settings) as gs:
@@ -79,10 +161,18 @@ def main() -> int:
 
             logged_in_users = [a.authuser for a in accounts if a.logged_in]
 
+            # --- 시나리오 A: 로그아웃 계정 로그인(수동 유도, @gmail.com 만 허용) ---
+            if args.login_logged_out:
+                return _scenario_login_logged_out(gs, accounts)
+
             # 로그인된 계정이 하나도 없으면 가차없이 종료.
             if not logged_in_users:
                 logger.error("로그인된 구글 계정이 없습니다. 종료합니다.")
                 return 3
+
+            # --- 시나리오 B: 세션 전환 반영 검증 ---
+            if args.verify_switch:
+                return _scenario_verify_switch(gs, logged_in_users)
 
             if args.list:
                 return 0

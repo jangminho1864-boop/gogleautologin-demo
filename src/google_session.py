@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import logging
-import time
+import re
 from dataclasses import dataclass
 
 from selenium import webdriver
@@ -37,6 +37,23 @@ _SIGNIN_MARKERS = (
     "workspace.google.com",
     "/intl/",
 )
+
+
+# 로그인 시나리오를 허용할 소비자(개인) 구글 계정 도메인.
+# 그 외(@회사도메인 등 기업/Workspace 계정)는 보안 이슈로 로그인을 진행하지 않는다.
+_CONSUMER_DOMAIN = "gmail.com"
+
+
+def is_loginable_email(email: str | None) -> bool:
+    """로그인 시나리오를 진행해도 되는 계정인지 판별한다.
+
+    @gmail.com 개인 계정만 허용한다. 도메인을 알 수 없거나(@gmail.com 아님,
+    기업/Workspace 포함) 비-gmail 이면 보안상 제외(False)한다.
+    """
+    if not email or "@" not in email:
+        return False
+    domain = email.rsplit("@", 1)[1].strip().lower()
+    return domain == _CONSUMER_DOMAIN
 
 
 @dataclass
@@ -181,6 +198,53 @@ class GoogleSession:
         except Exception:  # noqa: BLE001 - 추출 실패는 치명적이지 않음
             return None
         return None
+
+    def switch_account(self, authuser: int) -> AccountInfo:
+        """해당 authuser 로 세션을 전환하고, 전환이 실제로 반영됐는지 확인해 반환한다.
+
+        '이미 로그인된 계정 사이를 전환할 때 정상 반영되는지' 검증용. 전환 후의
+        로그인 상태와 활성 계정 이메일을 읽어 AccountInfo 로 돌려준다.
+        """
+        logged_in = self.is_logged_in(authuser)  # mail.google.com/u/{idx}/ 로 이동
+        email = self._read_active_email() if logged_in else None
+        logger.info(
+            "세션 전환: authuser=%s logged_in=%s email=%s",
+            authuser, logged_in, email or "-",
+        )
+        return AccountInfo(authuser=authuser, email=email, logged_in=logged_in)
+
+    def read_logged_out_email(self, authuser: int) -> str | None:
+        """로그아웃된 슬롯의 이메일을 계정 선택(account chooser)에서 best-effort 로 읽는다.
+
+        로그아웃 상태에서도 구글은 '이전에 사용한 계정' 목록에 이메일을 노출하는
+        경우가 많다. 도메인 기반 예외처리(@gmail.com 만 허용)를 위해 사용한다.
+        """
+        driver = self._require_driver()
+        try:
+            driver.get("https://accounts.google.com/AccountChooser")
+            WebDriverWait(driver, 10).until(
+                lambda d: d.current_url and "google.com" in d.current_url
+            )
+            for el in driver.find_elements(By.CSS_SELECTOR, "*[data-email]"):
+                val = el.get_attribute("data-email")
+                if val and "@" in val:
+                    return val.strip()
+            # data-email 이 없으면 본문 텍스트에서 이메일 패턴을 best-effort 로 탐색.
+            m = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", driver.page_source or "")
+            return m.group(0) if m else None
+        except Exception:  # noqa: BLE001 - 읽기 실패는 치명적이지 않음(미상으로 처리)
+            return None
+
+    def open_login_page(self, authuser: int = 0) -> str:
+        """로그아웃된 계정을 '사람이 직접' 로그인할 수 있도록 로그인 페이지를 연다.
+
+        비밀번호 자동 입력은 하지 않는다(구글 봇 탐지/보안 회피). 페이지만 띄우고
+        실제 로그인(2단계 인증 포함)은 사용자가 수행한다.
+        """
+        driver = self._require_driver()
+        driver.get(f"https://accounts.google.com/AddSession?authuser={authuser}")
+        logger.info("로그인 페이지 오픈: authuser=%s", authuser)
+        return driver.current_url or ""
 
     def screenshot(self, path: str) -> str:
         """현재 화면을 캡처해 저장(데모 증빙용)."""

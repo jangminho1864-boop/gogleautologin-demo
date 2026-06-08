@@ -46,7 +46,20 @@ python main.py --authuser 1   # 두 번째 계정
 python main.py --list         # 로그인된 계정 목록만 출력
 python main.py --headless     # 화면 없이 실행
 python main.py --profile "Profile 1"   # 다른 프로필 폴더 사용
+
+# 전용 프로필 사용(기본 프로필은 Chrome이 자동화를 차단하므로 권장 경로)
+python main.py --user-data-dir ".chrome-profile"
+
+# 시나리오 A: 로그인된 계정들 사이 세션 전환이 정상 반영되는지 검증
+python main.py --user-data-dir ".chrome-profile" --verify-switch
+
+# 시나리오 B: 로그아웃된 계정 로그인(수동 유도, @gmail.com 만 허용)
+python main.py --user-data-dir ".chrome-profile" --login-logged-out
 ```
+
+> **계정 정책**: 로그인 시나리오는 **`@gmail.com` 개인 계정만** 허용한다.
+> 비-gmail(기업/Workspace 등) 계정은 보안 이슈로 진행하지 않고 제외한다.
+> 로그인은 페이지만 자동으로 열고 **실제 입력은 사용자가 수동**으로 한다(봇 탐지 회피).
 
 > 실행 정책: 실제 Chrome 프로필을 **우선** 사용하며, 프로필을 못 찾거나/잠겨
 > 있거나/로그인된 계정이 없으면 **재시도 없이 즉시 종료**한다.
