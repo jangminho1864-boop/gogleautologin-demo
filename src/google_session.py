@@ -199,19 +199,81 @@ class GoogleSession:
             return None
         return None
 
-    def switch_account(self, authuser: int) -> AccountInfo:
+    def switch_account(self, authuser: int, mode: str = "url") -> AccountInfo:
         """해당 authuser 로 세션을 전환하고, 전환이 실제로 반영됐는지 확인해 반환한다.
 
         '이미 로그인된 계정 사이를 전환할 때 정상 반영되는지' 검증용. 전환 후의
         로그인 상태와 활성 계정 이메일을 읽어 AccountInfo 로 돌려준다.
+
+        Parameters
+        ----------
+        mode : "url"   -> mail.google.com/u/{idx}/ URL 인덱스로 전환(기본, 안정적)
+               "click" -> 우상단 계정 아바타를 클릭해 팝업에서 선택(폴백: url)
         """
+        if mode == "click":
+            return self._switch_by_click(authuser)
+
         logged_in = self.is_logged_in(authuser)  # mail.google.com/u/{idx}/ 로 이동
         email = self._read_active_email() if logged_in else None
         logger.info(
-            "세션 전환: authuser=%s logged_in=%s email=%s",
+            "세션 전환(url): authuser=%s logged_in=%s email=%s",
             authuser, logged_in, email or "-",
         )
         return AccountInfo(authuser=authuser, email=email, logged_in=logged_in)
+
+    def _switch_by_click(self, authuser: int) -> AccountInfo:
+        """우상단 계정 아바타를 클릭해 계정 전환 팝업에서 대상 계정을 선택한다.
+
+        Gmail OneGoogle 팝업의 DOM 은 자주 바뀌므로 best-effort 로 시도하고,
+        실패하면 안정적인 URL 방식으로 폴백한다.
+        """
+        driver = self._require_driver()
+        try:
+            # 0) 아바타가 보이도록 기준 계정 화면을 띄운다.
+            if "mail.google.com" not in (driver.current_url or ""):
+                driver.get("https://mail.google.com/mail/u/0/")
+                WebDriverWait(driver, self.settings.page_load_timeout).until(
+                    lambda d: "mail.google.com" in (d.current_url or "")
+                )
+
+            # 1) 우상단 계정 아바타 클릭 → 전환 팝업 오픈.
+            avatar = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, "a[aria-label*='@'], a[href*='SignOutOptions']")
+                )
+            )
+            avatar.click()
+
+            # 2) 팝업은 보통 iframe(accounts.google.com) 안에 계정 목록을 그린다.
+            target_email = None
+            for frame in driver.find_elements(By.CSS_SELECTOR, "iframe[src*='accounts.google.com']"):
+                driver.switch_to.frame(frame)
+                links = driver.find_elements(
+                    By.CSS_SELECTOR, "a[href*='/u/'], *[data-authuser], *[data-email]"
+                )
+                for el in links:
+                    href = el.get_attribute("href") or ""
+                    data_au = el.get_attribute("data-authuser")
+                    if data_au == str(authuser) or f"/u/{authuser}/" in href or f"authuser={authuser}" in href:
+                        target_email = el.get_attribute("data-email")
+                        el.click()
+                        break
+                driver.switch_to.default_content()
+                if target_email is not None or self.is_logged_in(authuser):
+                    break
+
+            # 3) 전환 결과를 URL 기준으로 최종 확인.
+            logged_in = self.is_logged_in(authuser)
+            email = self._read_active_email() if logged_in else None
+            logger.info(
+                "세션 전환(click): authuser=%s logged_in=%s email=%s",
+                authuser, logged_in, email or "-",
+            )
+            return AccountInfo(authuser=authuser, email=email, logged_in=logged_in)
+        except Exception as e:  # noqa: BLE001 - 클릭 전환은 취약 → URL 폴백
+            driver.switch_to.default_content()
+            logger.warning("클릭 전환 실패(%s) → URL 방식으로 폴백", type(e).__name__)
+            return self.switch_account(authuser, mode="url")
 
     def read_logged_out_email(self, authuser: int) -> str | None:
         """로그아웃된 슬롯의 이메일을 계정 선택(account chooser)에서 best-effort 로 읽는다.

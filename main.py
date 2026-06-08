@@ -56,22 +56,26 @@ def parse_args() -> argparse.Namespace:
                    help="사용할 User Data 경로. 지정하면 실제 Chrome 대신 전용 프로필 사용")
     p.add_argument("--verify-switch", action="store_true",
                    help="로그인된 계정들 사이 세션 전환이 정상 반영되는지 검증")
+    p.add_argument("--switch-mode", choices=["url", "click"], default="url",
+                   help="계정 전환 방식: url(기본,안정) / click(우상단 아바타 클릭)")
     p.add_argument("--login-logged-out", action="store_true",
                    help="로그아웃된 계정 로그인 시나리오(수동 로그인 유도, @gmail.com 만 허용)")
     return p.parse_args()
 
 
-def _scenario_verify_switch(gs: GoogleSession, logged_in_users: list[int]) -> int:
+def _scenario_verify_switch(
+    gs: GoogleSession, logged_in_users: list[int], switch_mode: str = "url"
+) -> int:
     """로그인된 계정들 사이를 차례로 전환하며 전환이 정상 반영되는지 검증한다.
 
     각 authuser 로 전환했을 때 (1) 로그인 상태가 유지되고 (2) 활성 계정 이메일이
     서로 겹치지 않으면(=인덱스별로 다른 계정이 활성화되면) 전환이 정상 반영된 것으로 본다.
     """
-    print("\n[ 세션 전환 반영 검증 ]")
+    print(f"\n[ 세션 전환 반영 검증 (mode={switch_mode}) ]")
     seen_emails: dict[str, int] = {}
     all_ok = True
     for u in logged_in_users:
-        info = gs.switch_account(u)
+        info = gs.switch_account(u, mode=switch_mode)
         problems = []
         if not info.logged_in:
             problems.append("전환 후 미로그인")
@@ -172,7 +176,7 @@ def main() -> int:
 
             # --- 시나리오 B: 세션 전환 반영 검증 ---
             if args.verify_switch:
-                return _scenario_verify_switch(gs, logged_in_users)
+                return _scenario_verify_switch(gs, logged_in_users, args.switch_mode)
 
             if args.list:
                 return 0

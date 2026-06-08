@@ -52,6 +52,8 @@ python main.py --user-data-dir ".chrome-profile"
 
 # 시나리오 A: 로그인된 계정들 사이 세션 전환이 정상 반영되는지 검증
 python main.py --user-data-dir ".chrome-profile" --verify-switch
+# 전환 방식 선택: url(기본, 안정) / click(우상단 아바타 클릭 → 폴백 url)
+python main.py --user-data-dir ".chrome-profile" --verify-switch --switch-mode click
 
 # 시나리오 B: 로그아웃된 계정 로그인(수동 유도, @gmail.com 만 허용)
 python main.py --user-data-dir ".chrome-profile" --login-logged-out
