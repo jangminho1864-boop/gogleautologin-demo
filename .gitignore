@@ -1,0 +1,12 @@
+# Chrome 프로필(로그인 세션 포함) — 절대 커밋 금지
+.chrome-profile/
+.pw-profile/
+
+# 데모 산출물
+demo_*.png
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
