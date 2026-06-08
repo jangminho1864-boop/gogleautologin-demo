@@ -144,7 +144,8 @@ def main() -> int:
     #   1) --user-data-dir 인자  2) GLA_USER_DATA_DIR 환경변수(Settings.from_env)
     #   3) 실제 Chrome User Data(C드라이브) 자동 탐지
     if args.user_data_dir:
-        settings.user_data_dir = Path(args.user_data_dir).expanduser()
+        # 상대경로는 Chrome 구동(DevToolsActivePort) 실패를 유발하므로 절대경로로 변환.
+        settings.user_data_dir = Path(args.user_data_dir).expanduser().resolve()
     elif "GLA_USER_DATA_DIR" not in os.environ:
         real_dir = detect_chrome_user_data_dir()
         if real_dir is None:

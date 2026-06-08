@@ -97,11 +97,11 @@ class GoogleSession:
         options.add_argument(f"--profile-directory={self.settings.profile_directory}")
         if self.settings.headless:
             options.add_argument("--headless=new")
-        # 자동화 배너/일부 탐지 신호 완화(세션 재사용 방식에서는 보조적).
+        # 자동화 배너 완화(세션 재사용 방식에서는 보조적).
+        # 주의: excludeSwitches/useAutomationExtension 실험 옵션은 일부 실제 프로필에서
+        # DevToolsActivePort 구동 실패를 유발해 제거했다.
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
 
         # Selenium 4.6+ 는 Selenium Manager가 드라이버를 자동 관리(별도 설치 불필요).
         self.driver = webdriver.Chrome(options=options)
@@ -174,9 +174,16 @@ class GoogleSession:
         '크롬에 있는 구글 계정 목록 활용' 요구사항을 구현하는 부분.
         """
         results: list[AccountInfo] = []
+        seen_emails: set[str] = set()
         for idx in range(self.settings.account_probe_limit):
             logged_in = self.is_logged_in(idx)
             email = self._read_active_email() if logged_in else None
+            # 범위를 벗어난 authuser 는 구글이 기본 계정(0)으로 매핑한다.
+            # 이미 본 이메일이 다시 나오면 실제 계정 범위를 초과한 것이므로 중단.
+            if logged_in and email and email in seen_emails:
+                break
+            if email:
+                seen_emails.add(email)
             results.append(AccountInfo(authuser=idx, email=email, logged_in=logged_in))
             if not logged_in and idx > 0:
                 # 보통 인덱스는 연속적이라, 첫 빈 슬롯에서 멈춰도 무방.
