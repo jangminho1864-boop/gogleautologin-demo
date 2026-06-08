@@ -60,6 +60,8 @@ def parse_args() -> argparse.Namespace:
                    help="계정 전환 방식: url(기본,안정) / click(우상단 아바타 클릭)")
     p.add_argument("--login-logged-out", action="store_true",
                    help="로그아웃된 계정 로그인 시나리오(수동 로그인 유도, @gmail.com 만 허용)")
+    p.add_argument("--switch-to", type=int, default=None, metavar="N",
+                   help="실행 직후 Gmail 없이 중립 엔드포인트로 N번 계정으로 즉시 전환")
     return p.parse_args()
 
 
@@ -156,6 +158,15 @@ def main() -> int:
 
     try:
         with GoogleSession(settings) as gs:
+            # --- 1안: 실행 직후 즉시 전환(Gmail 미경유) ---
+            #     계정 전체 탐색 없이 바로 N번 계정으로 전환만 수행한다.
+            if args.switch_to is not None:
+                info = gs.switch_at_launch(args.switch_to)
+                mark = "OK" if info.logged_in else "FAIL(미로그인/미반영)"
+                print(f"\n즉시 전환 → authuser={info.authuser}  "
+                      f"email={info.email or '-'}  [{mark}]")
+                return 0 if info.logged_in else 3
+
             # 1) 계정 목록 탐색
             accounts = gs.discover_accounts()
             print("\n[ 프로필 내 구글 계정 목록 ]")

@@ -304,6 +304,31 @@ class GoogleSession:
         except Exception:  # noqa: BLE001 - 읽기 실패는 치명적이지 않음(미상으로 처리)
             return None
 
+    def switch_at_launch(self, authuser: int) -> AccountInfo:
+        """실행 직후 Gmail 없이 '중립 엔드포인트'로 즉시 계정을 전환한다(1안).
+
+        google.com/?authuser=N 한 번 로드로 활성 계정이 전환된다(약 1초). Gmail 같은
+        무거운 앱을 거치지 않으므로 빠르고, 받은편지함이 필요 없는 전환/검증에 적합하다.
+        """
+        driver = self._require_driver()
+        driver.get(f"https://www.google.com/?authuser={authuser}")
+        try:
+            WebDriverWait(driver, 15).until(
+                lambda d: "google.com" in (d.current_url or "")
+            )
+        except Exception:  # noqa: BLE001 - 타임아웃은 미반영으로 간주
+            pass
+        email = self._read_active_email_generic()
+        logged_in = email is not None
+        logger.info("즉시 전환(launch): authuser=%s email=%s", authuser, email or "-")
+        return AccountInfo(authuser=authuser, email=email, logged_in=logged_in)
+
+    def _read_active_email_generic(self) -> str | None:
+        """현재 페이지 소스에서 활성 계정 이메일을 best-effort 로 추출(앱 비종속)."""
+        driver = self._require_driver()
+        m = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", driver.page_source or "")
+        return m.group(0) if m else None
+
     def open_login_page(self, authuser: int = 0) -> str:
         """로그아웃된 계정을 '사람이 직접' 로그인할 수 있도록 로그인 페이지를 연다.
 
