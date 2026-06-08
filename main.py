@@ -76,12 +76,26 @@ def _run_once(settings: Settings, args: argparse.Namespace) -> tuple[bool, bool]
             # 로그인된 계정이 없으면 진입을 시도하지 않고 폴백 신호를 돌려준다.
             return False, False
 
-        # 2) 지정 계정으로 진입 + 검증
-        url = gs.open_account(authuser=args.authuser)
-        print(f"\n진입 성공 → {url}")
+        # 2) 로그아웃/미로그인 계정 예외처리:
+        #    요청한 authuser가 로그인 상태가 아니면 진입을 건너뛰고,
+        #    로그인된 계정 중 가장 앞선 것으로 자동 대체한다.
+        logged_in_users = [a.authuser for a in accounts if a.logged_in]
+        target = args.authuser
+        if target not in logged_in_users:
+            fallback_user = logged_in_users[0]
+            logger.warning(
+                "authuser=%s 계정은 로그아웃/미로그인 상태입니다. "
+                "테스트에서 제외하고 로그인된 authuser=%s 계정으로 진행합니다.",
+                target, fallback_user,
+            )
+            target = fallback_user
 
-        # 3) 증빙 스크린샷
-        shot = gs.screenshot(f"demo_authuser_{args.authuser}.png")
+        # 3) 지정(또는 대체) 계정으로 진입 + 검증
+        url = gs.open_account(authuser=target)
+        print(f"\n진입 성공 → authuser={target} → {url}")
+
+        # 4) 증빙 스크린샷
+        shot = gs.screenshot(f"demo_authuser_{target}.png")
         print(f"스크린샷 저장: {shot}")
         return True, True
 
