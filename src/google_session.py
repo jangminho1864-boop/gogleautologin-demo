@@ -26,8 +26,17 @@ from .profile_manager import ProfileManager
 
 logger = logging.getLogger(__name__)
 
-# 로그인 안 된 상태에서 구글이 보내는 인증/계정선택 페이지의 특징 문자열.
-_SIGNIN_MARKERS = ("accounts.google.com", "ServiceLogin", "signin", "AccountChooser")
+# 로그인 안 된 상태에서 구글이 보내는 인증/계정선택/마케팅 페이지의 특징 문자열.
+# 미로그인으로 mail.google.com 진입 시 구글은 accounts.google.com(로그인) 또는
+# workspace.google.com/.../gmail(마케팅 랜딩)으로 리다이렉트한다.
+_SIGNIN_MARKERS = (
+    "accounts.google.com",
+    "ServiceLogin",
+    "signin",
+    "AccountChooser",
+    "workspace.google.com",
+    "/intl/",
+)
 
 
 @dataclass
@@ -102,16 +111,20 @@ class GoogleSession:
         페이지로 리다이렉트하는지를 신호로 사용한다(가장 안정적인 판별 방식).
         """
         driver = self._require_driver()
-        driver.get(f"https://mail.google.com/mail/u/{authuser}/")
         try:
+            driver.get(f"https://mail.google.com/mail/u/{authuser}/")
             WebDriverWait(driver, 10).until(
                 lambda d: d.current_url and "google.com" in d.current_url
             )
-        except Exception:  # noqa: BLE001 - 타임아웃 등은 미로그인으로 간주
+        except Exception:  # noqa: BLE001 - 로드/렌더러 타임아웃 등은 미로그인으로 간주
             return False
 
         url = driver.current_url or ""
-        logged_in = not any(marker in url for marker in _SIGNIN_MARKERS)
+        # 로그인된 경우에만 mail.google.com 에 그대로 머문다.
+        # 미로그인 시에는 accounts/workspace 등 다른 호스트로 리다이렉트된다.
+        logged_in = "mail.google.com" in url and not any(
+            marker in url for marker in _SIGNIN_MARKERS
+        )
         logger.debug("authuser=%s logged_in=%s url=%s", authuser, logged_in, url)
         return logged_in
 
