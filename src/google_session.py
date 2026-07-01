@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -52,8 +53,11 @@ def is_loginable_email(email: str | None) -> bool:
     """
     if not email or "@" not in email:
         return False
-    domain = email.rsplit("@", 1)[1].strip().lower()
-    return domain == _CONSUMER_DOMAIN
+    local, _, domain = email.rpartition("@")
+    # 사용자명(local part)이 비어 있으면 유효한 계정이 아니다("@gmail.com" 등).
+    if not local.strip():
+        return False
+    return domain.strip().lower() == _CONSUMER_DOMAIN
 
 
 @dataclass
@@ -102,6 +106,15 @@ class GoogleSession:
         # DevToolsActivePort 구동 실패를 유발해 제거했다.
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
+
+        # CI/컨테이너 헤드리스 환경 보정: 러너에서 헤드리스 Chrome이
+        # /dev/shm(64MB)·샌드박스 문제로 'session not created'로 죽는 것을 막는다.
+        # GLA_CHROME_EXTRA_ARGS 에 공백 구분으로 지정(예: "--no-sandbox --disable-dev-shm-usage").
+        # 로컬 실기능(실제 프로필)에는 영향이 없도록 env가 있을 때만 적용한다.
+        extra = os.environ.get("GLA_CHROME_EXTRA_ARGS", "").strip()
+        if extra:
+            for arg in extra.split():
+                options.add_argument(arg)
 
         # Selenium 4.6+ 는 Selenium Manager가 드라이버를 자동 관리(별도 설치 불필요).
         self.driver = webdriver.Chrome(options=options)
