@@ -41,11 +41,32 @@ jobs:
       - name: Install dev deps
         run: pip install -r requirements-dev.txt
 
+      - name: Show tool/dep versions
+        run: |
+          {
+            echo "### 버전 (${{ matrix.python-version }})"
+            echo '```'
+            python -V
+            pip list | grep -Ei "selenium|mypy|ruff|pytest" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Lint (ruff)
         run: ruff check .
 
+      # 실패 원인을 로그 열람 권한 없이도 볼 수 있게 요약에 남긴다.
       - name: Type check (mypy)
-        run: mypy src
+        run: |
+          set -o pipefail
+          mypy src main.py 2>&1 | tee /tmp/mypy.txt || {
+            {
+              echo "### mypy 실패 (${{ matrix.python-version }})"
+              echo '```'
+              cat /tmp/mypy.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
 
       - name: Unit tests (no browser)
         run: pytest -m "not smoke" -v
