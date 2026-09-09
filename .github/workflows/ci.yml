@@ -8,7 +8,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # main 뿐 아니라 작업 브랜치에서도 돌려야 PR 이전에 깨진 걸 잡을 수 있다.
+    branches: [main, 'feature/**', 'fix/**']
   pull_request:
   workflow_dispatch:
 
