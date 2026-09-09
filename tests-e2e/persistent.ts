@@ -16,6 +16,7 @@
  */
 import path from 'node:path';
 import { test as base, chromium, type BrowserContext, type Page } from '@playwright/test';
+import { assertNotRealProfile } from './profile-guard';
 
 /** 자동화 전용 프로필 경로. .gitignore 로 커밋이 차단되어 있다(쿠키 포함). */
 export const PROFILE_DIR =
@@ -25,6 +26,9 @@ const isCI = !!process.env.CI;
 
 export const test = base.extend<{ context: BrowserContext; page: Page }>({
   context: async ({}, use) => {
+    // 실제 Chrome 프로필이면 여기서 막는다(전 계정 로그아웃 방지).
+    assertNotRealProfile(PROFILE_DIR);
+
     const context = await chromium.launchPersistentContext(PROFILE_DIR, {
       headless: isCI,
       // 로컬은 실제 Google Chrome(북마크/UI 가 익숙한 그 크롬), CI 는 번들 Chromium.
