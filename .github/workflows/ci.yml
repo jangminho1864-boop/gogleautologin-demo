@@ -54,17 +54,14 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
-      # 실패 원인을 로그 열람 권한 없이도 볼 수 있게 요약에 남긴다.
+      # 실패 원인을 로그 열람 권한 없이도 볼 수 있게 annotation 으로 내보낸다.
       - name: Type check (mypy)
         run: |
           set -o pipefail
           mypy src main.py 2>&1 | tee /tmp/mypy.txt || {
-            {
-              echo "### mypy 실패 (${{ matrix.python-version }})"
-              echo '```'
-              cat /tmp/mypy.txt
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::[py${{ matrix.python-version }}] $line"
+            done < /tmp/mypy.txt
             exit 1
           }
 
