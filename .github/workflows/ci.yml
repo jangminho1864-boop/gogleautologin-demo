@@ -8,8 +8,9 @@ name: CI
 
 on:
   push:
-    # main 뿐 아니라 작업 브랜치에서도 돌려야 PR 이전에 깨진 걸 잡을 수 있다.
-    branches: [main, 'feature/**', 'fix/**']
+    # 모든 브랜치에서 실행한다. 접두사를 나열하면 새 접두사(refactor/** 등)를
+    # 쓸 때마다 CI 가 조용히 건너뛰어지므로 와일드카드로 둔다.
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
