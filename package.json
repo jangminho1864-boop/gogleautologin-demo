@@ -8,7 +8,9 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "codegen": "playwright codegen",
-    "report": "playwright show-report"
+    "report": "playwright show-report",
+    "test:slow": "PW_SLOWMO=400 playwright test",
+    "test:debug": "playwright test --debug"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0"
