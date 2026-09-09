@@ -84,7 +84,9 @@ class GoogleSession:
         self.driver: webdriver.Chrome | None = None
 
     # --- 컨텍스트 매니저 -------------------------------------------------
-    def __enter__(self) -> "GoogleSession":
+    # PYI034(Self 반환 권장)는 무시한다: Python 3.9 를 지원해야 하는데 typing.Self 는
+    # 3.11+ 이고, 이 클래스는 상속을 전제하지 않아 구체 타입 반환으로 충분하다.
+    def __enter__(self) -> GoogleSession:  # noqa: PYI034
         self.start()
         return self
 
@@ -338,8 +340,8 @@ class GoogleSession:
             WebDriverWait(driver, 15).until(
                 lambda d: "google.com" in (d.current_url or "")
             )
-        except Exception:  # noqa: BLE001 - 타임아웃은 미반영으로 간주
-            pass
+        except Exception as exc:  # noqa: BLE001 - 타임아웃은 미반영으로 간주
+            logger.debug("즉시 전환 대기 실패(무시하고 진행): %s", exc)
         email = self._read_active_email_generic()
         logged_in = email is not None
         logger.info("즉시 전환(launch): authuser=%s email=%s", authuser, email or "-")

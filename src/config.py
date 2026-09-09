@@ -76,7 +76,7 @@ class Settings:
 
     # 환경변수로 덮어쓸 수 있게 한다(클로드 코드/CI 환경에서 유용).
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         s = cls()
         if v := os.environ.get("GLA_USER_DATA_DIR"):
             s.user_data_dir = Path(v).expanduser()
