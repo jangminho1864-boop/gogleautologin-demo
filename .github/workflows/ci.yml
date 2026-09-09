@@ -8,7 +8,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # main 뿐 아니라 작업 브랜치에서도 돌려야 PR 이전에 깨진 걸 잡을 수 있다.
+    branches: [main, 'feature/**', 'fix/**']
   pull_request:
   workflow_dispatch:
 
@@ -40,11 +41,29 @@ jobs:
       - name: Install dev deps
         run: pip install -r requirements-dev.txt
 
+      - name: Show tool/dep versions
+        run: |
+          {
+            echo "### 버전 (${{ matrix.python-version }})"
+            echo '```'
+            python -V
+            pip list | grep -Ei "selenium|mypy|ruff|pytest" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Lint (ruff)
         run: ruff check .
 
+      # 실패 원인을 로그 열람 권한 없이도 볼 수 있게 annotation 으로 내보낸다.
       - name: Type check (mypy)
-        run: mypy src
+        run: |
+          set -o pipefail
+          mypy src main.py 2>&1 | tee /tmp/mypy.txt || {
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::[py${{ matrix.python-version }}] $line"
+            done < /tmp/mypy.txt
+            exit 1
+          }
 
       - name: Unit tests (no browser)
         run: pytest -m "not smoke" -v

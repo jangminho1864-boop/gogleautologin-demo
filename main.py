@@ -39,11 +39,11 @@ from pathlib import Path
 from selenium.common.exceptions import WebDriverException
 
 from src import (
-    clone_profile,
     GoogleSession,
     NotLoggedInError,
     ProfileLockedError,
     Settings,
+    clone_profile,
     detect_chrome_user_data_dir,
 )
 from src.google_session import is_loginable_email

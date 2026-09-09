@@ -6,7 +6,7 @@ import pytest
 
 from src.config import Settings
 from src.exceptions import ProfileLockedError
-from src.profile_manager import ProfileManager, _LOCK_HINTS
+from src.profile_manager import _LOCK_HINTS, ProfileManager
 
 
 def _mgr(tmp_path) -> ProfileManager:

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-import src.config as config
+from src import config
 from src.config import Settings, detect_chrome_user_data_dir
 
 

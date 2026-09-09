@@ -10,13 +10,13 @@ from .google_session import AccountInfo, GoogleSession
 from .profile_manager import ProfileManager, clone_profile
 
 __all__ = [
-    "Settings",
-    "detect_chrome_user_data_dir",
-    "GoogleSession",
     "AccountInfo",
-    "ProfileManager",
-    "clone_profile",
     "GoogleAutomationError",
+    "GoogleSession",
     "NotLoggedInError",
     "ProfileLockedError",
+    "ProfileManager",
+    "Settings",
+    "clone_profile",
+    "detect_chrome_user_data_dir",
 ]
