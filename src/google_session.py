@@ -136,6 +136,18 @@ class GoogleSession:
             raise RuntimeError("세션이 시작되지 않았습니다. start() 를 먼저 호출하세요.")
         return self.driver
 
+    @staticmethod
+    def _wait_url_contains(driver: webdriver.Chrome, needle: str, timeout: int) -> None:
+        """현재 URL 에 needle 이 포함될 때까지 대기한다.
+
+        until 의 람다 인자 대신 바깥의 driver 를 참조한다(같은 객체). selenium 4.41+
+        에서 WebDriverWait 가 제네릭이 되면서 람다 인자가 미해결 TypeVar 로 추론돼
+        mypy 가 current_url 접근을 인식하지 못하기 때문이다.
+        """
+        WebDriverWait(driver, timeout).until(
+            lambda _: needle in (driver.current_url or "")
+        )
+
     def is_logged_in(self, authuser: int = 0) -> bool:
         """해당 authuser 계정이 로그인 상태인지 판별한다.
 
@@ -145,9 +157,7 @@ class GoogleSession:
         driver = self._require_driver()
         try:
             driver.get(f"https://mail.google.com/mail/u/{authuser}/")
-            WebDriverWait(driver, 10).until(
-                lambda d: d.current_url and "google.com" in d.current_url
-            )
+            self._wait_url_contains(driver, "google.com", 10)
         except Exception:  # noqa: BLE001 - 로드/렌더러 타임아웃 등은 미로그인으로 간주
             return False
 
@@ -254,8 +264,8 @@ class GoogleSession:
             # 0) 아바타가 보이도록 기준 계정 화면을 띄운다.
             if "mail.google.com" not in (driver.current_url or ""):
                 driver.get("https://mail.google.com/mail/u/0/")
-                WebDriverWait(driver, self.settings.page_load_timeout).until(
-                    lambda d: "mail.google.com" in (d.current_url or "")
+                self._wait_url_contains(
+                    driver, "mail.google.com", self.settings.page_load_timeout
                 )
 
             # 1) 우상단 계정 아바타 클릭 → 전환 팝업 오픈.
@@ -315,9 +325,7 @@ class GoogleSession:
         driver = self._require_driver()
         try:
             driver.get("https://accounts.google.com/AccountChooser")
-            WebDriverWait(driver, 10).until(
-                lambda d: d.current_url and "google.com" in d.current_url
-            )
+            self._wait_url_contains(driver, "google.com", 10)
             for el in driver.find_elements(By.CSS_SELECTOR, "*[data-email]"):
                 val = el.get_attribute("data-email")
                 if val and "@" in val:
@@ -337,9 +345,7 @@ class GoogleSession:
         driver = self._require_driver()
         driver.get(f"https://www.google.com/?authuser={authuser}")
         try:
-            WebDriverWait(driver, 15).until(
-                lambda d: "google.com" in (d.current_url or "")
-            )
+            self._wait_url_contains(driver, "google.com", 15)
         except Exception as exc:  # noqa: BLE001 - 타임아웃은 미반영으로 간주
             logger.debug("즉시 전환 대기 실패(무시하고 진행): %s", exc)
         email = self._read_active_email_generic()
