@@ -20,13 +20,14 @@
 google-login-automation/
 ├── main.py                 # 데모 실행: 계정 탐색 → 진입 → 검증 → 스크린샷
 ├── setup_profile.py        # 최초 1회 수동 로그인 헬퍼
-├── playwright_variant.py   # [보너스] 동일 전략의 Playwright 구현
 ├── requirements.txt
-└── src/
-    ├── config.py           # 설정 + OS별 실제 크롬 경로 탐지
-    ├── profile_manager.py  # 프로필 잠금 감지 / 경로 준비
-    ├── google_session.py   # 핵심: 세션 시작·계정 선택·로그인 검증·계정 탐색
-    └── exceptions.py
+├── src/
+│   ├── config.py           # 설정 + OS별 실제 크롬 경로 탐지
+│   ├── profile_manager.py  # 프로필 잠금 감지 / 경로 준비 / 프로필 복제
+│   ├── browser_session.py  # 범용: 브라우저 기동·종료·대기·캡처 (사이트 비종속)
+│   ├── google_session.py   # 구글 전용: 계정 선택·로그인 검증·계정 탐색
+│   └── exceptions.py
+└── tests/                  # 단위 테스트 + 헤드리스 스모크
 ```
 
 ## 설치
