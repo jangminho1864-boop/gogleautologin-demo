@@ -180,6 +180,8 @@ def main() -> int:
                 real_dir,
             )
             settings.user_data_dir = real_dir
+            # 실제 프로필에서는 구글 세션을 변경하는 엔드포인트 호출을 금지한다.
+            settings.on_real_profile = True
         else:
             logger.error(
                 "실제 Chrome 프로필로의 자동 실행은 차단되어 있습니다.\n"

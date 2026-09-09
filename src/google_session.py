@@ -22,7 +22,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from .config import Settings
-from .exceptions import NotLoggedInError
+from .exceptions import GoogleAutomationError, NotLoggedInError
 from .profile_manager import ProfileManager
 
 logger = logging.getLogger(__name__)
@@ -301,6 +301,15 @@ class GoogleSession:
         로그아웃 상태에서도 구글은 '이전에 사용한 계정' 목록에 이메일을 노출하는
         경우가 많다. 도메인 기반 예외처리(@gmail.com 만 허용)를 위해 사용한다.
         """
+        # AccountChooser 는 계정 선택 상태를 바꾸는 엔드포인트다. 실제 프로필에서는
+        # 호출하지 않는다(이메일 표시는 부가 정보이므로 미상으로 처리).
+        if self.settings.on_real_profile:
+            logger.warning(
+                "실제 프로필이므로 AccountChooser 조회를 건너뜁니다(세션 보호). "
+                "authuser=%s 이메일은 미상으로 처리합니다.", authuser,
+            )
+            return None
+
         driver = self._require_driver()
         try:
             driver.get("https://accounts.google.com/AccountChooser")
@@ -348,6 +357,17 @@ class GoogleSession:
         비밀번호 자동 입력은 하지 않는다(구글 봇 탐지/보안 회피). 페이지만 띄우고
         실제 로그인(2단계 인증 포함)은 사용자가 수행한다.
         """
+        # AddSession 은 '이 브라우저의 계정 구성을 바꾼다'는 요청이라 멀티로그인 쿠키를
+        # 재작성한다. 실제 프로필에서 이 플로우가 중간에 끊기면 로그인된 계정이 전부
+        # 로그아웃될 수 있으므로 호출 자체를 금지한다.
+        if self.settings.on_real_profile:
+            raise GoogleAutomationError(
+                "실제 Chrome 프로필에서는 로그인 페이지(AddSession) 열기를 차단합니다.\n"
+                "  이 엔드포인트는 브라우저의 계정 구성을 변경해, 중간에 끊기면\n"
+                "  로그인된 구글 계정이 전부 로그아웃될 수 있습니다.\n"
+                "  로그인이 필요하면 평소 쓰는 Chrome에서 직접 로그인하세요."
+            )
+
         driver = self._require_driver()
         driver.get(f"https://accounts.google.com/AddSession?authuser={authuser}")
         logger.info("로그인 페이지 오픈: authuser=%s", authuser)
