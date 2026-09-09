@@ -94,3 +94,33 @@ jobs:
 
       - name: Headless boot smoke (no Google)
         run: pytest -m smoke -v
+
+  e2e-playwright:
+    # Playwright E2E 레이어. 로컬 fixture 페이지만 사용하므로 외부 사이트·계정에
+    # 접속하지 않는다(Python 본체 잡과 독립적으로 실행).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E
+        run: npx playwright test
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
