@@ -1,5 +1,6 @@
 # Chrome 프로필(로그인 세션 포함) — 절대 커밋 금지
 .chrome-profile/
+.chrome-profile-clone/
 .pw-profile/
 .ab-profiles/
 
@@ -11,3 +12,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# macOS
+.DS_Store

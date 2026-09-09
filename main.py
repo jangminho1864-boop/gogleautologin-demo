@@ -14,13 +14,18 @@
 
 사용법
 ------
-    python main.py                # 첫 번째 계정(authuser=0)으로 진입
-    python main.py --authuser 1   # 두 번째 계정으로 진입
-    python main.py --list         # 로그인된 계정 목록만 출력
-    python main.py --profile "Profile 1"   # 다른 프로필 폴더 사용
+    python main.py --clone-real-profile          # [권장] 복제본으로 안전하게 실행
+    python main.py --clone-real-profile --list   # 계정 목록만 출력
+    python main.py --user-data-dir ./work-profile  # 전용 프로필 사용
+    python main.py --authuser 1 --clone-real-profile  # 두 번째 계정으로 진입
 
-주의: 실제 Chrome 프로필은 Chrome이 실행 중이면 잠겨 있으므로, 먼저 Chrome을
-모두 종료해야 한다.
+⚠ 실제 프로필 직접 사용 금지
+    실제(라이브) Chrome 프로필을 자동화로 구동하면 구글이 세션 바인딩 실패/자동화로
+    판단해 **로그인된 계정이 전부 로그아웃**될 수 있다. 그래서 명시적 옵트인
+    (--use-real-profile) 없이는 실제 프로필로 실행되지 않도록 막아 두었다.
+    안전한 방법은 --clone-real-profile 로 복제본에서 구동하는 것이다.
+
+주의: 프로필 복제/사용 전 실행 중인 Chrome을 모두 종료해야 한다(프로필 잠금).
 """
 
 from __future__ import annotations
@@ -34,6 +39,7 @@ from pathlib import Path
 from selenium.common.exceptions import WebDriverException
 
 from src import (
+    clone_profile,
     GoogleSession,
     NotLoggedInError,
     ProfileLockedError,
@@ -62,6 +68,11 @@ def parse_args() -> argparse.Namespace:
                    help="로그아웃된 계정 로그인 시나리오(수동 로그인 유도, @gmail.com 만 허용)")
     p.add_argument("--switch-to", type=int, default=None, metavar="N",
                    help="실행 직후 Gmail 없이 중립 엔드포인트로 N번 계정으로 즉시 전환")
+    p.add_argument("--clone-real-profile", action="store_true",
+                   help="[권장] 실제 프로필을 복제해 복제본으로 실행. 원본 세션을 건드리지 않는다")
+    p.add_argument("--use-real-profile", action="store_true",
+                   help="[위험] 실제 Chrome 프로필을 직접 구동. 구글이 세션을 무효화해 "
+                        "로그인된 계정이 전부 로그아웃될 수 있다")
     return p.parse_args()
 
 
@@ -153,7 +164,33 @@ def main() -> int:
         if real_dir is None:
             logger.error("실제 Chrome User Data 디렉터리를 찾지 못했습니다. (Chrome 미설치?)")
             return 3
-        settings.user_data_dir = real_dir
+
+        # 안전 가드: 실제(라이브) 프로필을 자동화로 직접 구동하면 구글이 세션 바인딩
+        # 실패/자동화로 판단해 **로그인된 계정이 전부 로그아웃**될 수 있다.
+        # 따라서 명시적 옵트인 없이는 실제 프로필을 쓰지 않는다.
+        if args.clone_real_profile:
+            dest = (Path.cwd() / ".chrome-profile-clone").resolve()
+            logger.info("실제 프로필 복제 중(캐시 제외)... %s", dest)
+            settings.user_data_dir = clone_profile(real_dir, dest, args.profile)
+        elif args.use_real_profile:
+            logger.warning(
+                "실제 Chrome 프로필을 직접 사용합니다: %s\n"
+                "  ⚠ 구글이 세션을 무효화해 로그인된 계정이 전부 로그아웃될 수 있습니다.\n"
+                "  ⚠ 안전하게 쓰려면 --clone-real-profile 을 사용하세요.",
+                real_dir,
+            )
+            settings.user_data_dir = real_dir
+        else:
+            logger.error(
+                "실제 Chrome 프로필로의 자동 실행은 차단되어 있습니다.\n"
+                "  실제 프로필을 자동화로 띄우면 구글 세션이 무효화되어\n"
+                "  로그인된 계정이 전부 로그아웃될 수 있습니다.\n"
+                "  다음 중 하나를 선택하세요:\n"
+                "    --clone-real-profile   복제본으로 안전하게 실행 (권장)\n"
+                "    --user-data-dir PATH   전용 프로필 사용\n"
+                "    --use-real-profile     위험을 감수하고 실제 프로필 사용"
+            )
+            return 4
     logger.info("프로필 사용: %s", settings.user_data_dir / args.profile)
 
     try:
