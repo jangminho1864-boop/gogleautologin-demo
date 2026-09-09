@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -21,7 +22,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from .config import Settings
-from .exceptions import NotLoggedInError
+from .exceptions import GoogleAutomationError, NotLoggedInError
 from .profile_manager import ProfileManager
 
 logger = logging.getLogger(__name__)
@@ -52,8 +53,11 @@ def is_loginable_email(email: str | None) -> bool:
     """
     if not email or "@" not in email:
         return False
-    domain = email.rsplit("@", 1)[1].strip().lower()
-    return domain == _CONSUMER_DOMAIN
+    local, _, domain = email.rpartition("@")
+    # 사용자명(local part)이 비어 있으면 유효한 계정이 아니다("@gmail.com" 등).
+    if not local.strip():
+        return False
+    return domain.strip().lower() == _CONSUMER_DOMAIN
 
 
 @dataclass
@@ -102,6 +106,15 @@ class GoogleSession:
         # DevToolsActivePort 구동 실패를 유발해 제거했다.
         options.add_argument("--no-first-run")
         options.add_argument("--no-default-browser-check")
+
+        # CI/컨테이너 헤드리스 환경 보정: 러너에서 헤드리스 Chrome이
+        # /dev/shm(64MB)·샌드박스 문제로 'session not created'로 죽는 것을 막는다.
+        # GLA_CHROME_EXTRA_ARGS 에 공백 구분으로 지정(예: "--no-sandbox --disable-dev-shm-usage").
+        # 로컬 실기능(실제 프로필)에는 영향이 없도록 env가 있을 때만 적용한다.
+        extra = os.environ.get("GLA_CHROME_EXTRA_ARGS", "").strip()
+        if extra:
+            for arg in extra.split():
+                options.add_argument(arg)
 
         # Selenium 4.6+ 는 Selenium Manager가 드라이버를 자동 관리(별도 설치 불필요).
         self.driver = webdriver.Chrome(options=options)
@@ -288,6 +301,15 @@ class GoogleSession:
         로그아웃 상태에서도 구글은 '이전에 사용한 계정' 목록에 이메일을 노출하는
         경우가 많다. 도메인 기반 예외처리(@gmail.com 만 허용)를 위해 사용한다.
         """
+        # AccountChooser 는 계정 선택 상태를 바꾸는 엔드포인트다. 실제 프로필에서는
+        # 호출하지 않는다(이메일 표시는 부가 정보이므로 미상으로 처리).
+        if self.settings.on_real_profile:
+            logger.warning(
+                "실제 프로필이므로 AccountChooser 조회를 건너뜁니다(세션 보호). "
+                "authuser=%s 이메일은 미상으로 처리합니다.", authuser,
+            )
+            return None
+
         driver = self._require_driver()
         try:
             driver.get("https://accounts.google.com/AccountChooser")
@@ -304,12 +326,48 @@ class GoogleSession:
         except Exception:  # noqa: BLE001 - 읽기 실패는 치명적이지 않음(미상으로 처리)
             return None
 
+    def switch_at_launch(self, authuser: int) -> AccountInfo:
+        """실행 직후 Gmail 없이 '중립 엔드포인트'로 즉시 계정을 전환한다(1안).
+
+        google.com/?authuser=N 한 번 로드로 활성 계정이 전환된다(약 1초). Gmail 같은
+        무거운 앱을 거치지 않으므로 빠르고, 받은편지함이 필요 없는 전환/검증에 적합하다.
+        """
+        driver = self._require_driver()
+        driver.get(f"https://www.google.com/?authuser={authuser}")
+        try:
+            WebDriverWait(driver, 15).until(
+                lambda d: "google.com" in (d.current_url or "")
+            )
+        except Exception:  # noqa: BLE001 - 타임아웃은 미반영으로 간주
+            pass
+        email = self._read_active_email_generic()
+        logged_in = email is not None
+        logger.info("즉시 전환(launch): authuser=%s email=%s", authuser, email or "-")
+        return AccountInfo(authuser=authuser, email=email, logged_in=logged_in)
+
+    def _read_active_email_generic(self) -> str | None:
+        """현재 페이지 소스에서 활성 계정 이메일을 best-effort 로 추출(앱 비종속)."""
+        driver = self._require_driver()
+        m = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", driver.page_source or "")
+        return m.group(0) if m else None
+
     def open_login_page(self, authuser: int = 0) -> str:
         """로그아웃된 계정을 '사람이 직접' 로그인할 수 있도록 로그인 페이지를 연다.
 
         비밀번호 자동 입력은 하지 않는다(구글 봇 탐지/보안 회피). 페이지만 띄우고
         실제 로그인(2단계 인증 포함)은 사용자가 수행한다.
         """
+        # AddSession 은 '이 브라우저의 계정 구성을 바꾼다'는 요청이라 멀티로그인 쿠키를
+        # 재작성한다. 실제 프로필에서 이 플로우가 중간에 끊기면 로그인된 계정이 전부
+        # 로그아웃될 수 있으므로 호출 자체를 금지한다.
+        if self.settings.on_real_profile:
+            raise GoogleAutomationError(
+                "실제 Chrome 프로필에서는 로그인 페이지(AddSession) 열기를 차단합니다.\n"
+                "  이 엔드포인트는 브라우저의 계정 구성을 변경해, 중간에 끊기면\n"
+                "  로그인된 구글 계정이 전부 로그아웃될 수 있습니다.\n"
+                "  로그인이 필요하면 평소 쓰는 Chrome에서 직접 로그인하세요."
+            )
+
         driver = self._require_driver()
         driver.get(f"https://accounts.google.com/AddSession?authuser={authuser}")
         logger.info("로그인 페이지 오픈: authuser=%s", authuser)

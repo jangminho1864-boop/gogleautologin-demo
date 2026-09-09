@@ -57,6 +57,9 @@ python main.py --user-data-dir ".chrome-profile" --verify-switch --switch-mode c
 
 # 시나리오 B: 로그아웃된 계정 로그인(수동 유도, @gmail.com 만 허용)
 python main.py --user-data-dir ".chrome-profile" --login-logged-out
+
+# 즉시 전환(1안): 실행 직후 Gmail 없이 N번 계정으로 전환(중립 엔드포인트, ~1초)
+python main.py --user-data-dir ".chrome-profile" --switch-to 2
 ```
 
 > **계정 정책**: 로그인 시나리오는 **`@gmail.com` 개인 계정만** 허용한다.

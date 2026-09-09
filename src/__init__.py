@@ -7,7 +7,7 @@ from .exceptions import (
     ProfileLockedError,
 )
 from .google_session import AccountInfo, GoogleSession
-from .profile_manager import ProfileManager
+from .profile_manager import ProfileManager, clone_profile
 
 __all__ = [
     "Settings",
@@ -15,6 +15,7 @@ __all__ = [
     "GoogleSession",
     "AccountInfo",
     "ProfileManager",
+    "clone_profile",
     "GoogleAutomationError",
     "NotLoggedInError",
     "ProfileLockedError",

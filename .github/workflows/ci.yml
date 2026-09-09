@@ -1,0 +1,76 @@
+name: CI
+
+# 코드 품질 검증 전용 파이프라인.
+# 주의(정책): 실제 Google 계정 로그인 자동화는 여기서 실행하지 않는다.
+#  - GitHub Actions 약관: 리포 소프트웨어의 빌드/테스트와 무관한 활동 금지
+#  - 클라우드 IP에서 실제 계정 자동화 시 봇탐지·계정정지 위험
+# 따라서 CI는 lint/type/unit + '구글 미접속' 헤드리스 기동 스모크까지만 수행한다.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 최소권한 토큰(기본 read-only).
+permissions:
+  contents: read
+
+# 같은 ref의 중복 실행 취소.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-type-unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dev deps
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type check (mypy)
+        run: mypy src
+
+      - name: Unit tests (no browser)
+        run: pytest -m "not smoke" -v
+
+  headless-smoke:
+    # 구글 미접속. 프로젝트 코드가 러너에서 Chrome을 실제로 띄우는지만 검증.
+    runs-on: ubuntu-latest
+    env:
+      # Linux 러너 헤드리스 크래시(/dev/shm·샌드박스) 방지 플래그.
+      GLA_CHROME_EXTRA_ARGS: "--no-sandbox --disable-dev-shm-usage"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime deps + pytest
+        run: pip install -r requirements.txt pytest
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Headless boot smoke (no Google)
+        run: pytest -m smoke -v

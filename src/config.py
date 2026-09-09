@@ -68,6 +68,12 @@ class Settings:
     account_probe_limit: int = 5
     page_load_timeout: int = 30
 
+    # 지금 구동 대상이 사용자의 '실제(라이브)' Chrome 프로필인지 여부.
+    # True 이면 구글 세션을 변경하는 엔드포인트(AddSession/AccountChooser) 호출을
+    # 금지한다. 실제 프로필에서 이들을 호출하면 멀티로그인 쿠키가 재작성되어
+    # 로그인된 계정이 전부 로그아웃될 수 있다.
+    on_real_profile: bool = False
+
     # 환경변수로 덮어쓸 수 있게 한다(클로드 코드/CI 환경에서 유용).
     @classmethod
     def from_env(cls) -> "Settings":
