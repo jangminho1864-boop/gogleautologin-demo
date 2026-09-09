@@ -27,7 +27,8 @@ google-login-automation/
 │   ├── browser_session.py  # 범용: 브라우저 기동·종료·대기·캡처 (사이트 비종속)
 │   ├── google_session.py   # 구글 전용: 계정 선택·로그인 검증·계정 탐색
 │   └── exceptions.py
-└── tests/                  # 단위 테스트 + 헤드리스 스모크
+├── tests/                  # 단위 테스트 + 헤드리스 스모크 (Python)
+└── tests-e2e/              # Playwright E2E (사이트 자동화 개발/디버깅용, Node)
 ```
 
 ## 설치

@@ -1,0 +1,16 @@
+{
+  "name": "gogleautologin-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright E2E 레이어 (사이트 자동화 개발/디버깅용). 본체는 Python+Selenium.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "codegen": "playwright codegen",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}

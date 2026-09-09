@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Login Demo</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 420px; margin: 60px auto; }
+  .step { display: none; }
+  .step.active { display: block; }
+  input { width: 100%; padding: 10px; margin: 8px 0; font-size: 16px; }
+  button { padding: 10px 18px; font-size: 15px; cursor: pointer; }
+  #result { margin-top: 16px; font-weight: 600; }
+</style>
+
+<h1>Login Demo</h1>
+
+<!-- 1단계: 로그인 진입 -->
+<div id="step-start" class="step active">
+  <button id="btn-login">로그인</button>
+</div>
+
+<!-- 2단계: 아이디 -->
+<div id="step-id" class="step">
+  <label for="username">아이디</label>
+  <input id="username" name="username" autocomplete="username" placeholder="아이디 입력">
+  <button id="btn-next">다음</button>
+</div>
+
+<!-- 3단계: 비밀번호 -->
+<div id="step-pw" class="step">
+  <label for="password">비밀번호</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" placeholder="비밀번호 입력">
+  <button id="btn-submit">로그인</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+  const show = (id) => {
+    document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  };
+  document.getElementById('btn-login').onclick = () => { show('step-id'); document.getElementById('username').focus(); };
+  document.getElementById('btn-next').onclick = () => {
+    if (!document.getElementById('username').value.trim()) {
+      document.getElementById('result').textContent = '아이디를 입력하세요';
+      return;
+    }
+    show('step-pw'); document.getElementById('password').focus();
+  };
+  document.getElementById('btn-submit').onclick = () => {
+    const ok = document.getElementById('password').value.length > 0;
+    document.getElementById('result').textContent = ok ? '로그인 성공' : '비밀번호를 입력하세요';
+    if (ok) document.body.dataset.loggedIn = 'true';
+  };
+</script>
